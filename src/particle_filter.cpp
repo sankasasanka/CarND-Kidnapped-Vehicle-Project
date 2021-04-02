@@ -233,7 +233,7 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
       particles[i].weight*=calculateWeightsMultiVarGauss(sig_x,sig_y,particles[i].x,particles[i].y,MappedObs[j].x,MappedObs[j].y); 
 
     }
-    cout<<"Weight of particle: "<<i<<": "<<particles[i].weight<<"\n";
+    //cout<<"Weight of particle: "<<i<<": "<<particles[i].weight<<"\n";
     
   }
 std::cout<<"Update Weigths Done"<<"\n";
