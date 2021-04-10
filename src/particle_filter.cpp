@@ -15,6 +15,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 #include "helper_functions.h"
 
@@ -51,7 +52,7 @@ void ParticleFilter::init(double x, double y, double theta, double std[]) {
   normal_distribution<double> dist_theta(theta, std_theta);
   
   
-  num_particles = 10;  // TODO: Set the number of particles
+  num_particles = 100;  // TODO: Set the number of particles
   
   //creating a vector of particles
   vector<Particle> particles_init(num_particles);
@@ -103,24 +104,28 @@ void ParticleFilter::prediction(double delta_t, double std_pos[],
   normal_distribution<double> dist_y(0, std_y);
   normal_distribution<double> dist_theta(0, std_theta);
   
-  for (int i= 0;i<num_particles; i++){
-    
- 	double yaw_angle = particles[i].theta + yaw_rate * delta_t;
-    // prediction the equations
-    particles[i].x = particles[i].x +velocity/yaw_rate*(sin(yaw_angle+yaw_rate*delta_t)-sin(yaw_angle));
-    particles[i].y = particles[i].y +velocity/yaw_rate*(cos(yaw_angle)+cos(yaw_angle+yaw_rate*delta_t));
-    particles[i].theta += yaw_rate * delta_t;
-    
-    // Adding noise 
-    particles[i].x +=dist_x(gen) ;
-    particles[i].y +=dist_y(gen) ;
-    particles[i].theta +=dist_theta(gen) ;
-   
-  }
-  
-  // Calculate the prediction values 
-  std::cout<<"Particles: "<<particles.size()<<" ,Prediction values Done"<<"\n";
+  if (abs(yaw_rate)>0.0001){
+  	yaw_rate = abs(yaw_rate);
+  	cout<<"Yaw Rate: "<<yaw_rate<<"\n";
+    for (int i= 0;i<num_particles; i++){
 
+      double yaw_angle = particles[i].theta + yaw_rate * delta_t;
+      // prediction the equations
+      particles[i].x = particles[i].x +(velocity/yaw_rate)*(sin(yaw_angle+yaw_rate*delta_t)-sin(yaw_angle));
+      particles[i].y = particles[i].y +(velocity/yaw_rate)*(cos(yaw_angle)+cos(yaw_angle+yaw_rate*delta_t));
+      particles[i].theta += yaw_rate * delta_t;
+
+      // Adding noise 
+      particles[i].x +=dist_x(gen) ;
+      particles[i].y +=dist_y(gen) ;
+      particles[i].theta +=dist_theta(gen) ;
+
+    }
+
+    // Calculate the prediction values 
+    std::cout<<"Particles: "<<particles.size()<<" ,Prediction values Done"<<"\n";
+
+  }
 }
 
 void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted, 
@@ -137,7 +142,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    */
     // calculate the distance to each landmark and select the landmark having the least distance 
     double min_distance=numeric_limits<double>::max();
-    double landmark_id_temp;
+    double landmark_id_temp=-1.0;
 
     for (unsigned int j = 0;j<observations.size();j++){
       for (unsigned int k=0; k<predicted.size();k++){
@@ -149,9 +154,7 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
           	//std::cout<<distance_calc<<"\n";
           	
           	landmark_id_temp = predicted[k].id;
-        }
-        
-        
+        }        
       }
       // set the particle association to the landmark id
       observations[j].id = landmark_id_temp;
@@ -179,62 +182,67 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
   //std::vector<single_landmark_s>landmarks = map_landmarks.landmark_list;
   
   // looping over the particles 
-  std::cout<<particles.size()<<"\n";
+  //std::cout<<particles.size()<<"\n";
   for (unsigned int i=0;i<particles.size();i++){
     
-    double particle_x = particles[i].x;
-    double particle_y = particles[i].y;
-    //double particle_theta = particles[i].theta;
-    
-    // Select the landmarks inside the sensor_range 
-    vector<LandmarkObs> predictions;
-    
-    for (unsigned int l=0;l<map_landmarks.landmark_list.size();l++){
-    	
-      float select_x = map_landmarks.landmark_list[l].x_f;
-      float select_y = map_landmarks.landmark_list[l].y_f;
-      int select_id = map_landmarks.landmark_list[l].id_i;
-      double landmark_range = sqrt(pow(select_x-particle_x,2)+pow(select_y-particle_y,2));
-      
-      if(landmark_range<=sensor_range){
-      	predictions.push_back(LandmarkObs{select_id,select_x,select_y});
+      double particle_x = particles[i].x;
+      double particle_y = particles[i].y;
+      //double particle_theta = particles[i].theta;
+
+      // Select the landmarks inside the sensor_range 
+      vector<LandmarkObs> predictions;
+
+      for (unsigned int l=0;l<map_landmarks.landmark_list.size();l++){
+
+        float select_x = map_landmarks.landmark_list[l].x_f;
+        float select_y = map_landmarks.landmark_list[l].y_f;
+        int select_id = map_landmarks.landmark_list[l].id_i;
+        double landmark_range = sqrt(pow(select_x-particle_x,2)+pow(select_y-particle_y,2));
+
+        if(landmark_range<=sensor_range){
+          predictions.push_back(LandmarkObs{select_id,select_x,select_y});
+        }
       }
-      
+
+      //set weight to 1
+      particles[i].weight = 1;
+
+      // Select the landmarks inside the sensor_range 
+      vector<LandmarkObs> MappedObs;
     
-    }
-    
-    //set weight to 1
-  	particles[i].weight = 1;
-    
-    // Select the landmarks inside the sensor_range 
-    vector<LandmarkObs> MappedObs;
-    
-    
-    // looping over observation 
-    for (unsigned int j=0;j<observations.size();j++){
-    	
-      // transform the observation from car to map cordinates [Homogenous transformation]
-      
-      double map_x = particles[i].x + observations[j].x*cos(particles[i].theta)-observations[j].y*sin(particles[i].theta);
-      double map_y = particles[i].y + observations[j].x*sin(particles[i].theta)+observations[j].y*cos(particles[i].theta);
-      MappedObs.push_back(LandmarkObs{observations[j].id,map_x,map_y});
-     
-    }
-    // Associate the Mpa corrdiante observation with the landmark observation in the sensor range
-    dataAssociation(predictions,MappedObs);
-    
-    // Loop through the associated observations
-    for (unsigned int j=0;j<MappedObs.size();j++){
-      
-      // Weight contribution calculation from bivariate gaussian distribution 
-      // Fucntion for the bivariate gaussian distribution is adapted in the helper fucntions
+      // looping over observation 
+      for (unsigned int j=0;j<observations.size();j++){
+
+        // transform the observation from car to map cordinates [Homogenous transformation]
+        double map_x = particles[i].x + observations[j].x*cos(particles[i].theta)-observations[j].y*sin(particles[i].theta);
+        double map_y = particles[i].y + observations[j].x*sin(particles[i].theta)+observations[j].y*cos(particles[i].theta);
+        MappedObs.push_back(LandmarkObs{observations[j].id,map_x,map_y});
+      }
+      // Associate the Mpa corrdiante observation with the landmark observation in the sensor range
+      dataAssociation(predictions,MappedObs);
+      double predict_x;
+      double predict_y;
       double sig_x  =std_landmark[0];
       double sig_y  =std_landmark[1];
-      particles[i].weight*=calculateWeightsMultiVarGauss(sig_x,sig_y,particles[i].x,particles[i].y,MappedObs[j].x,MappedObs[j].y); 
 
-    }
-    //cout<<"Weight of particle: "<<i<<": "<<particles[i].weight<<"\n";
-    
+      for (unsigned int j=0;j<MappedObs.size();j++){
+
+        // Loop through the associated observations
+        for (unsigned int k =0;k<predictions.size();k++){
+
+          // Weight contribution calculation from bivariate gaussian distribution 
+          // Fucntion for the bivariate gaussian distribution is adapted in the helper fucntions
+
+          if (predictions[k].id==MappedObs[j].id){
+            //cout<<"particle: "<<i<<": "<<predictions[k].x<<": "<<predictions[k].y<<": "<<MappedObs[j].x<<": "<<MappedObs[j].y<<"\n";
+            predict_x = predictions[k].x;	
+            predict_y = predictions[k].y;	
+
+            //cout<<"Weight of particle: "<<i<<": "<<particles[i].weight<<"\n";
+          }
+        }
+        particles[i].weight*=calculateWeightsMultiVarGauss(sig_x,sig_y,predict_x,predict_y,MappedObs[j].x,MappedObs[j].y); 
+      }   
   }
 std::cout<<"Update Weigths Done"<<"\n";
 }
@@ -248,7 +256,11 @@ void ParticleFilter::resample() {
    */
 
 	// Get weights and max weight.
-    //cout<<num_particles<<"\n";
+  //cout<<num_particles<<"\n";
+  
+  // random number generator
+  std::default_random_engine gen;
+  
   // Get weights and max weight.
   vector<double> weights;
   double maxWeight = numeric_limits<double>::min();
@@ -258,6 +270,7 @@ void ParticleFilter::resample() {
       maxWeight = particles[i].weight;
     }
   }
+  std::cout<<maxWeight<<" Max Weight Done"<<"\n";
 
   // Creating distributions.
   uniform_real_distribution<double> distDouble(0.0, maxWeight);
@@ -272,6 +285,7 @@ void ParticleFilter::resample() {
   vector<Particle> resampledParticles;
   for(int i = 0; i < num_particles; i++) {
     beta += distDouble(gen) * 2.0;
+    //std::cout<<beta<<" "<<weights[index]<<"\n";
     while( beta > weights[index]) {
       beta -= weights[index];
       index = (index + 1) % num_particles;
@@ -280,6 +294,7 @@ void ParticleFilter::resample() {
   }
 
   particles = resampledParticles;
+  std::cout<<"Particle Resampling Done"<<"\n";
 }
 
 void ParticleFilter::SetAssociations(Particle& particle, 
